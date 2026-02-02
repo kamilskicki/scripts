@@ -1,11 +1,10 @@
 """
-YouTube Transcript Fetcher - Standalone Script
+YouTube Transcript Fetcher
 
 A standalone module for fetching YouTube video transcripts.
 Based on youtube_transcript_api, refactored for standalone use.
 
 Dependencies: requests, defusedxml
-Install: pip install requests defusedxml
 """
 
 from dataclasses import dataclass, asdict
@@ -172,23 +171,12 @@ class PoTokenRequired(TranscriptError):
 class FetchedTranscriptSnippet:
     text: str
     start: float
-    """
-    The timestamp at which this transcript snippet appears on screen in seconds.
-    """
     duration: float
-    """
-    The duration of how long the snippet in seconds. Be aware that this is not the 
-    duration of the transcribed speech, but how long the snippet stays on screen.
-    Therefore, there can be overlaps between snippets!
-    """
 
 
 @dataclass
 class FetchedTranscript:
-    """
-    Represents a fetched transcript. This object is iterable, which allows you to
-    iterate over the transcript snippets.
-    """
+    """Represents a fetched transcript. Iterable over snippets."""
 
     snippets: List[FetchedTranscriptSnippet]
     video_id: str
@@ -256,10 +244,6 @@ class Transcript:
         is_generated: bool,
         translation_languages: List[_TranslationLanguage],
     ):
-        """
-        You probably don't want to initialize this directly. Usually you'll access Transcript objects using a
-        TranscriptList.
-        """
         self._http_client = http_client
         self.video_id = video_id
         self._url = url
@@ -268,15 +252,10 @@ class Transcript:
         self.is_generated = is_generated
         self.translation_languages = translation_languages
         self._translation_languages_dict = {
-            translation_language.language_code: translation_language.language
-            for translation_language in translation_languages
+            tl.language_code: tl.language for tl in translation_languages
         }
 
     def fetch(self, preserve_formatting: bool = False) -> FetchedTranscript:
-        """
-        Loads the actual transcript data.
-        :param preserve_formatting: whether to keep select HTML text formatting
-        """
         if "&exp=xpe" in self._url:
             raise PoTokenRequired(self.video_id)
         response = self._http_client.get(self._url)
@@ -292,10 +271,10 @@ class Transcript:
         )
 
     def __str__(self) -> str:
-        return '{language_code} ("{language}"){translation_description}'.format(
+        return '{language_code} ("{language}"){translatable}'.format(
             language=self.language,
             language_code=self.language_code,
-            translation_description="[TRANSLATABLE]" if self.is_translatable else "",
+            translatable="[TRANSLATABLE]" if self.is_translatable else "",
         )
 
     @property
@@ -305,16 +284,12 @@ class Transcript:
     def translate(self, language_code: str) -> "Transcript":
         if not self.is_translatable:
             raise NotTranslatable(self.video_id)
-
         if language_code not in self._translation_languages_dict:
             raise TranslationLanguageNotAvailable(self.video_id)
-
         return Transcript(
             self._http_client,
             self.video_id,
-            "{url}&tlang={language_code}".format(
-                url=self._url, language_code=language_code
-            ),
+            f"{self._url}&tlang={language_code}",
             self._translation_languages_dict[language_code],
             language_code,
             True,
@@ -323,10 +298,7 @@ class Transcript:
 
 
 class TranscriptList:
-    """
-    This object represents a list of transcripts. It can be iterated over to list all transcripts which are available
-    for a given YouTube video. Also, it provides functionality to search for a transcript in a given language.
-    """
+    """List of available transcripts for a YouTube video."""
 
     def __init__(
         self,
@@ -335,47 +307,27 @@ class TranscriptList:
         generated_transcripts: Dict[str, Transcript],
         translation_languages: List[_TranslationLanguage],
     ):
-        """
-        The constructor is only for internal use. Use the static build method instead.
-
-        :param video_id: the id of the video this TranscriptList is for
-        :param manually_created_transcripts: dict mapping language codes to the manually created transcripts
-        :param generated_transcripts: dict mapping language codes to the generated transcripts
-        :param translation_languages: list of languages which can be used for translatable languages
-        """
         self.video_id = video_id
         self._manually_created_transcripts = manually_created_transcripts
         self._generated_transcripts = generated_transcripts
         self._translation_languages = translation_languages
 
     @staticmethod
-    def build(
-        http_client: Session, video_id: str, captions_json: Dict
-    ) -> "TranscriptList":
-        """
-        Factory method for TranscriptList.
-
-        :param http_client: http client which is used to make the transcript retrieving http calls
-        :param video_id: the id of the video this TranscriptList is for
-        :param captions_json: the JSON parsed from the YouTube pages static HTML
-        :return: the created TranscriptList
-        """
+    def build(http_client: Session, video_id: str, captions_json: Dict) -> "TranscriptList":
         translation_languages = [
             _TranslationLanguage(
-                language=translation_language["languageName"]["runs"][0]["text"],
-                language_code=translation_language["languageCode"],
+                language=tl["languageName"]["runs"][0]["text"],
+                language_code=tl["languageCode"],
             )
-            for translation_language in captions_json.get("translationLanguages", [])
+            for tl in captions_json.get("translationLanguages", [])
         ]
 
         manually_created_transcripts = {}
         generated_transcripts = {}
 
         for caption in captions_json["captionTracks"]:
-            if caption.get("kind", "") == "asr":
-                transcript_dict = generated_transcripts
-            else:
-                transcript_dict = manually_created_transcripts
+            is_asr = caption.get("kind", "") == "asr"
+            transcript_dict = generated_transcripts if is_asr else manually_created_transcripts
 
             transcript_dict[caption["languageCode"]] = Transcript(
                 http_client,
@@ -383,7 +335,7 @@ class TranscriptList:
                 caption["baseUrl"].replace("&fmt=srv3", ""),
                 caption["name"]["runs"][0]["text"],
                 caption["languageCode"],
-                caption.get("kind", "") == "asr",
+                is_asr,
                 translation_languages if caption.get("isTranslatable", False) else [],
             )
 
@@ -401,46 +353,16 @@ class TranscriptList:
         )
 
     def find_transcript(self, language_codes: Iterable[str]) -> Transcript:
-        """
-        Finds a transcript for a given language code. Manually created transcripts are returned first and only if none
-        are found, generated transcripts are used. If you only want generated transcripts use
-        `find_manually_created_transcript` instead.
-
-        :param language_codes: A list of language codes in a descending priority. For example, if this is set to
-        ['de', 'en'] it will first try to fetch the german transcript (de) and then fetch the english transcript (en) if
-        it fails to do so.
-        :return: the found Transcript
-        """
         return self._find_transcript(
             language_codes,
             [self._manually_created_transcripts, self._generated_transcripts],
         )
 
     def find_generated_transcript(self, language_codes: Iterable[str]) -> Transcript:
-        """
-        Finds an automatically generated transcript for a given language code.
-
-        :param language_codes: A list of language codes in a descending priority. For example, if this is set to
-        ['de', 'en'] it will first try to fetch the german transcript (de) and then fetch the english transcript (en) if
-        it fails to do so.
-        :return: the found Transcript
-        """
         return self._find_transcript(language_codes, [self._generated_transcripts])
 
-    def find_manually_created_transcript(
-        self, language_codes: Iterable[str]
-    ) -> Transcript:
-        """
-        Finds a manually created transcript for a given language code.
-
-        :param language_codes: A list of language codes in a descending priority. For example, if this is set to
-        ['de', 'en'] it will first try to fetch the german transcript (de) and then fetch the english transcript (en) if
-        it fails to do so.
-        :return: the found Transcript
-        """
-        return self._find_transcript(
-            language_codes, [self._manually_created_transcripts]
-        )
+    def find_manually_created_transcript(self, language_codes: Iterable[str]) -> Transcript:
+        return self._find_transcript(language_codes, [self._manually_created_transcripts])
 
     def _find_transcript(
         self,
@@ -451,42 +373,19 @@ class TranscriptList:
             for transcript_dict in transcript_dicts:
                 if language_code in transcript_dict:
                     return transcript_dict[language_code]
-
         raise NoTranscriptFound(self.video_id, language_codes, self)
 
     def __str__(self) -> str:
-        return (
-            "For this video ({video_id}) transcripts are available in the following languages:\n\n"
-            "(MANUALLY CREATED)\n"
-            "{available_manually_created_transcript_languages}\n\n"
-            "(GENERATED)\n"
-            "{available_generated_transcripts}\n\n"
-            "(TRANSLATION LANGUAGES)\n"
-            "{available_translation_languages}"
-        ).format(
-            video_id=self.video_id,
-            available_manually_created_transcript_languages=self._get_language_description(
-                str(transcript)
-                for transcript in self._manually_created_transcripts.values()
-            ),
-            available_generated_transcripts=self._get_language_description(
-                str(transcript) for transcript in self._generated_transcripts.values()
-            ),
-            available_translation_languages=self._get_language_description(
-                '{language_code} ("{language}")'.format(
-                    language=translation_language.language,
-                    language_code=translation_language.language_code,
-                )
-                for translation_language in self._translation_languages
-            ),
-        )
+        def fmt(transcripts: Iterable) -> str:
+            items = [f" - {t}" for t in transcripts]
+            return "\n".join(items) if items else "None"
 
-    def _get_language_description(self, transcript_strings: Iterable[str]) -> str:
-        description = "\n".join(
-            " - {transcript}".format(transcript=transcript)
-            for transcript in transcript_strings
+        return (
+            f"Transcripts for {self.video_id}:\n\n"
+            f"(MANUALLY CREATED)\n{fmt(self._manually_created_transcripts.values())}\n\n"
+            f"(GENERATED)\n{fmt(self._generated_transcripts.values())}\n\n"
+            f"(TRANSLATION LANGUAGES)\n{fmt(f'{tl.language_code} ({tl.language})' for tl in self._translation_languages)}"
         )
-        return description if description else "None"
 
 
 class TranscriptListFetcher:
@@ -508,11 +407,7 @@ class TranscriptListFetcher:
             innertube_data = self._fetch_innertube_data(video_id, api_key)
             return self._extract_captions_json(innertube_data, video_id)
         except RequestBlocked as exception:
-            retries = (
-                0
-                if self._proxy_config is None
-                else self._proxy_config.retries_when_blocked
-            )
+            retries = 0 if self._proxy_config is None else self._proxy_config.retries_when_blocked
             if try_number + 1 < retries:
                 return self._fetch_captions_json(video_id, try_number=try_number + 1)
             raise exception.with_proxy_config(self._proxy_config)
@@ -528,21 +423,14 @@ class TranscriptListFetcher:
 
     def _extract_captions_json(self, innertube_data: Dict, video_id: str) -> Dict:
         self._assert_playability(innertube_data.get("playabilityStatus", {}), video_id)
-
-        captions_json = innertube_data.get("captions", {}).get(
-            "playerCaptionsTracklistRenderer"
-        )
+        captions_json = innertube_data.get("captions", {}).get("playerCaptionsTracklistRenderer")
         if captions_json is None or "captionTracks" not in captions_json:
             raise TranscriptsDisabled(video_id)
-
         return captions_json
 
     def _assert_playability(self, playability_status_data: Dict, video_id: str) -> None:
         playability_status = playability_status_data.get("status")
-        if (
-            playability_status != _PlayabilityStatus.OK.value
-            and playability_status is not None
-        ):
+        if playability_status != _PlayabilityStatus.OK.value and playability_status is not None:
             reason = playability_status_data.get("reason")
             if playability_status == _PlayabilityStatus.LOGIN_REQUIRED.value:
                 if reason == _PlayabilityFailedReason.BOT_DETECTED.value:
@@ -562,17 +450,13 @@ class TranscriptListFetcher:
                 .get("subreason", {})
                 .get("runs", [])
             )
-            raise VideoUnplayable(
-                video_id, reason, [run.get("text", "") for run in subreasons]
-            )
+            raise VideoUnplayable(video_id, reason, [run.get("text", "") for run in subreasons])
 
     def _create_consent_cookie(self, html: str, video_id: str) -> None:
         match = re.search('name="v" value="(.*?)"', html)
         if match is None:
             raise FailedToCreateConsentCookie(video_id)
-        self._http_client.cookies.set(
-            "CONSENT", "YES+" + match.group(1), domain=".youtube.com"
-        )
+        self._http_client.cookies.set("CONSENT", "YES+" + match.group(1), domain=".youtube.com")
 
     def _fetch_video_html(self, video_id: str) -> str:
         html = self._fetch_html(video_id)
@@ -590,28 +474,13 @@ class TranscriptListFetcher:
     def _fetch_innertube_data(self, video_id: str, api_key: str) -> Dict:
         response = self._http_client.post(
             INNERTUBE_API_URL.format(api_key=api_key),
-            json={
-                "context": INNERTUBE_CONTEXT,
-                "videoId": video_id,
-            },
+            json={"context": INNERTUBE_CONTEXT, "videoId": video_id},
         )
-        data = _raise_http_errors(response, video_id).json()
-        return data
+        return _raise_http_errors(response, video_id).json()
 
 
 class _TranscriptParser:
-    _FORMATTING_TAGS = [
-        "strong",  # important
-        "em",  # emphasized
-        "b",  # bold
-        "i",  # italic
-        "mark",  # marked
-        "small",  # smaller
-        "del",  # deleted
-        "ins",  # inserted
-        "sub",  # subscript
-        "sup",  # superscript
-    ]
+    _FORMATTING_TAGS = ["strong", "em", "b", "i", "mark", "small", "del", "ins", "sub", "sup"]
 
     def __init__(self, preserve_formatting: bool = False):
         self._html_regex = self._get_html_regex(preserve_formatting)
@@ -620,10 +489,8 @@ class _TranscriptParser:
         if preserve_formatting:
             formats_regex = "|".join(self._FORMATTING_TAGS)
             formats_regex = r"<\/?(?!\/?(" + formats_regex + r")\b).*?\b>"
-            html_regex = re.compile(formats_regex, re.IGNORECASE)
-        else:
-            html_regex = re.compile(r"<[^>]*>", re.IGNORECASE)
-        return html_regex
+            return re.compile(formats_regex, re.IGNORECASE)
+        return re.compile(r"<[^>]*>", re.IGNORECASE)
 
     def parse(self, raw_data: str) -> List[FetchedTranscriptSnippet]:
         return [
@@ -664,12 +531,6 @@ class YouTubeTranscriptApi:
         return session
 
     def list_transcripts(self, video_id: str) -> TranscriptList:
-        """
-        List all available transcripts for a video.
-        
-        :param video_id: The YouTube video ID
-        :return: TranscriptList object containing all available transcripts
-        """
         session = self._get_session()
         fetcher = TranscriptListFetcher(session, self._proxy_config)
         return fetcher.fetch(video_id)
@@ -680,24 +541,15 @@ class YouTubeTranscriptApi:
         languages: Optional[List[str]] = None,
         preserve_formatting: bool = False,
     ) -> FetchedTranscript:
-        """
-        Fetch the transcript for a video.
-        
-        :param video_id: The YouTube video ID
-        :param languages: List of language codes in priority order (default: ['en'])
-        :param preserve_formatting: Whether to preserve HTML formatting
-        :return: FetchedTranscript object
-        """
         if languages is None:
             languages = ["en"]
-        
         transcript_list = self.list_transcripts(video_id)
         transcript = transcript_list.find_transcript(languages)
         return transcript.fetch(preserve_formatting=preserve_formatting)
 
 
 # =============================================================================
-# CLI Usage
+# CLI
 # =============================================================================
 
 if __name__ == "__main__":
@@ -705,15 +557,14 @@ if __name__ == "__main__":
     import json
 
     if len(sys.argv) < 2:
-        print("Usage: python _transcripts.py <video_id> [language_code]")
-        print("Example: python _transcripts.py dQw4w9WgXcQ en")
+        print("Usage: python transcripts.py <video_id> [language_code]")
+        print("Example: python transcripts.py dQw4w9WgXcQ en")
         sys.exit(1)
 
     video_id = sys.argv[1]
     language = sys.argv[2] if len(sys.argv) > 2 else "en"
 
     api = YouTubeTranscriptApi()
-    
     try:
         transcript = api.get_transcript(video_id, languages=[language])
         print(json.dumps(transcript.to_raw_data(), indent=2))
