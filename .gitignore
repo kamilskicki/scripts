@@ -2,53 +2,25 @@
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
+dist/
+build/
+.eggs/
 
-# Virtual environments
+# Database
+*.db
+
+# Environment
 .env
-.venv
-env/
+.venv/
 venv/
-ENV/
 
 # IDE
-.idea/
 .vscode/
+.idea/
 *.swp
 *.swo
-*~
-
-# Project-specific
-*.db
-*.sqlite
-*.sqlite3
-processed_videos.db
-
-# Logs
-*.log
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Secrets (should use env vars, but just in case)
-.env.local
-.env.*.local
-secrets.json
-credentials.json
