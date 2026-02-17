@@ -1,74 +1,178 @@
-# 📺 YouTube Tools
+# YouTube Tools
 
-CLI tools for YouTube monitoring, transcript processing, and content automation.
+Production-focused CLI toolkit for YouTube monitoring and intelligence workflows.
 
-## Installation
+## Overview
 
-```bash
-cd YouTube
-pip install -r requirements.txt
+This directory contains composable commands for:
+
+- RSS channel monitoring
+- transcript retrieval
+- extractive summarization
+- key moment extraction
+- chat notifications
+- end-to-end pipeline runs
+- digest generation for briefing workflows
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[YouTube RSS Feeds] --> B[channel_monitor.py]
+    A --> C[yt_pipeline.py]
+    C --> D[(pipeline.db)]
+    E[youtube_processor.py] --> D
+    F[yt_summarizer.py] --> D
+    G[yt_key_moments.py] --> D
+    D --> H[yt_digest.py]
+    B --> I[memory/*.md]
+    H --> I
+    C --> I
+    C --> J[yt_notify.py]
 ```
 
-## Scripts
+## Requirements
 
-| Script | Description |
-|--------|-------------|
-| `channel_monitor.py` | RSS-based channel watcher - monitors 12 AI YouTube channels for new videos |
-| `youtube_processor.py` | Fetch transcripts from any YouTube video |
-| `yt_summarizer.py` | Generate summaries from video transcripts |
-| `yt_key_moments.py` | Extract key moments with timestamps |
-| `yt_notify.py` | Send notifications to Discord/Slack/Telegram |
-| `yt_pipeline.py` | All-in-one: monitor → download → transcript → summarize |
-| `yt_digest.py` | Daily digest generator for content curation |
+- Python 3.10+
+- `pip`
+- internet access for RSS/transcript endpoints
 
-## Usage
+Install:
 
 ```bash
-# Monitor channels for new videos
-python channel_monitor.py --hours 24 --output output.md
-
-# Get video transcript
-python youtube_processor.py dQw4w9WgXcQ
-
-# Summarize video
-python yt_summarizer.py dQw4w9WgXcQ
-
-# Extract key moments
-python yt_key_moments.py dQw4w9WgXcQ --count 5
-
-# Send notification
-python yt_notify.py --channel discord --test
-
-# Run full pipeline
-python yt_pipeline.py --hours 24
-
-# Quick digest
-python yt_digest.py --quick
+pip install -r YouTube/requirements.txt
 ```
 
-## Channel List
+Dev setup (tests/lint):
 
-Default monitored channels:
-- In The World of AI
-- Matthew Berman
-- AI Revolution
-- The AI Grid
-- Julia McCoy
-- Theo (t3.gg)
-- Wes Roth
-- AI Code King
-- ThePrimeTime
-- Fireship
-- NetworkChuck
-- AI Master
+```bash
+pip install -e .[dev]
+```
 
-## Use Cases
+## Shared modules
 
-- **Content Curation** — Monitor AI/tech channels for new content
-- **Research** — Extract transcripts for analysis
-- **Summarization** — Generate video summaries for newsletters
-- **Notifications** — Alert when new videos are published
-- **Digest** — Daily/weekly digests for Morning Briefing
+- `channels.py`: single source of truth for monitored channels
+- `common.py`: UTC time helpers, published-date parsing, robust YouTube ID extraction
 
----
-*Part of github.com/kamilskicki/scripts*
+## Command reference
+
+### 1) Channel monitor
+
+```bash
+python YouTube/channel_monitor.py --hours 24 --output yt-monitor.md
+```
+
+Options:
+- `--hours/-H`: lookback window
+- `--output/-o`: markdown output file in `memory/`
+- `--list/-l`: print configured channels
+
+Output:
+- JSON to stdout (automation friendly)
+- progress/errors to stderr
+
+### 2) Transcript processor
+
+```bash
+python YouTube/youtube_processor.py https://youtu.be/dQw4w9WgXcQ --json
+```
+
+Options:
+- positional `video_id`: ID or URL
+- `--json`: emit JSON payload
+
+### 3) Summarizer
+
+```bash
+python YouTube/yt_summarizer.py dQw4w9WgXcQ --length 600 --format markdown
+```
+
+Options:
+- positional `video_id`: ID or URL
+- `--format/-f`: `text|json|markdown`
+- `--length/-l`: summary character cap (enforced)
+
+### 4) Key moments
+
+```bash
+python YouTube/yt_key_moments.py dQw4w9WgXcQ --count 8 --format markdown
+```
+
+Options:
+- positional `video_id`: ID or URL
+- `--count/-c`: number of moments
+- `--format/-f`: `text|json|markdown`
+
+### 5) Notifications
+
+```bash
+python YouTube/yt_notify.py --channel discord --test
+```
+
+Supported channels:
+- `discord`
+- `slack`
+- `telegram`
+
+Config:
+- CLI flags or env vars from `YouTube/.env.example`
+
+### 6) Pipeline
+
+```bash
+python YouTube/yt_pipeline.py --hours 24 --output youtube-pipeline.md
+```
+
+Options:
+- `--hours/-H`: lookback window
+- `--output/-o`: markdown output file
+- `--list-channels/-l`: print channel IDs
+- `--dry-run`: detect only, skip transcript/summary
+
+### 7) Digest
+
+```bash
+python YouTube/yt_digest.py --days 1 --transcripts --output youtube-digest.md
+```
+
+Options:
+- `--days/-d`: lookback window
+- `--output/-o`: markdown output file
+- `--quick/-q`: compact channel counts
+- `--transcripts/-t`: include transcript previews
+- `--list-channels/-l`: print channel IDs
+- `--no-save`: stdout only
+
+## Data files
+
+- `processed_videos.db`: monitor state
+- `pipeline.db`: transcript + summary state
+- `memory/*.md`: generated artifacts
+
+## Automation examples
+
+Cron example:
+
+```bash
+0 */6 * * * cd /path/to/scripts && python YouTube/yt_pipeline.py --hours 6 --output yt-pipeline.md
+15 8 * * * cd /path/to/scripts && python YouTube/yt_digest.py --days 1 --output yt-digest.md
+```
+
+GitHub Actions: see `.github/workflows/ci.yml`.
+
+## Quality gates
+
+- `ruff check YouTube`
+- `pytest`
+
+## Troubleshooting
+
+- `No transcript available`: video likely has no transcript or transcript is restricted.
+- empty result sets: verify `--hours/--days` window and network reachability.
+- notification failures: validate webhook/token env vars and channel permissions.
+
+## Security and operations notes
+
+- never commit real webhook URLs or bot tokens
+- rotate chat webhook credentials periodically
+- keep `*.db` and `memory/` artifacts out of source control (already ignored)

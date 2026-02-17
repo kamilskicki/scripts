@@ -11,6 +11,8 @@ import re
 from typing import List, Dict, Optional
 from youtube_transcript_api import YouTubeTranscriptApi
 
+from common import extract_video_id
+
 
 class KeyMomentsExtractor:
     """Extract key moments with timestamps from video transcripts."""
@@ -59,8 +61,8 @@ class KeyMomentsExtractor:
                 }
                 for snippet in transcript
             ]
-        except Exception as e:
-            print(f"Error fetching transcript: {e}", file=sys.stderr)
+        except Exception as exc:
+            print(f"Error fetching transcript: {exc}", file=sys.stderr)
             return None
     
     def find_key_moments(
@@ -172,13 +174,11 @@ def main():
     
     args = parser.parse_args()
     
-    # Extract video ID from URL if needed
-    video_id = args.video_id
-    if "youtube.com" in video_id or "youtu.be" in video_id:
-        if "youtu.be" in video_id:
-            video_id = video_id.split("/")[-1].split("?")[0]
-        elif "v=" in video_id:
-            video_id = video_id.split("v=")[1].split("&")[0]
+    try:
+        video_id = extract_video_id(args.video_id)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(2)
     
     extractor = KeyMomentsExtractor()
     result = extractor.extract_moments(video_id, args.count)

@@ -1,79 +1,93 @@
-# 🔧 Scripts
+# Scripts
 
-CLI automation scripts for productivity, AI, and development.
+Automation scripts for YouTube intelligence workflows: discovery, transcript extraction, summarization, key moments, notifications, and digest generation.
 
 [![GitHub stars](https://img.shields.io/github/stars/kamilskicki/scripts)](https://github.com/kamilskicki/scripts)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![CI](https://github.com/kamilskicki/scripts/actions/workflows/ci.yml/badge.svg)](https://github.com/kamilskicki/scripts/actions/workflows/ci.yml)
 
-## 📺 YouTube Tools
+## Why this repo exists
 
-YouTube monitoring, transcript processing, and content automation CLI tools.
+This project is optimized for fast command-line content operations:
 
-**Location:** [`./YouTube/`](./YouTube/)
+- monitor high-signal channels
+- capture transcripts reliably
+- produce usable summaries and key moments
+- distribute alerts to team chat systems
+- create daily digests for research and briefing pipelines
 
-### Features
+## Project layout
 
-- 📡 **Channel Monitoring** — RSS-based YouTube channel watcher
-- 📝 **Transcript Processing** — Fetch and process video transcripts  
-- ✨ **Summarization** — AI-powered video summaries
-- ⏰ **Key Moments** — Extract important timestamps
-- 🔔 **Notifications** — Discord/Slack/Telegram alerts
-- 🔄 **Pipeline** — All-in-one monitoring and processing
-- 📊 **Digest** — Daily content digests
-
-### Quick Start
-
-```bash
-cd YouTube
-pip install -r requirements.txt
-
-# Monitor channels
-python channel_monitor.py --hours 24
-
-# Summarize video
-python yt_summarizer.py VIDEO_ID
-
-# Generate digest
-python yt_digest.py --quick
+```text
+.
+├─ YouTube/
+│  ├─ channel_monitor.py
+│  ├─ youtube_processor.py
+│  ├─ yt_summarizer.py
+│  ├─ yt_key_moments.py
+│  ├─ yt_notify.py
+│  ├─ yt_pipeline.py
+│  ├─ yt_digest.py
+│  ├─ channels.py
+│  ├─ common.py
+│  └─ tests/
+├─ .github/workflows/ci.yml
+├─ pyproject.toml
+└─ README.md
 ```
 
-## 📦 Available Scripts
+## Quick start
 
-### YouTube Automation
-| Script | Description |
-|--------|-------------|
-| `channel_monitor.py` | Monitor YouTube channels via RSS |
-| `youtube_processor.py` | Fetch video transcripts |
-| `yt_summarizer.py` | Generate video summaries |
-| `yt_key_moments.py` | Extract key moments with timestamps |
-| `yt_notify.py` | Send notifications (Discord/Slack/Telegram) |
-| `yt_pipeline.py` | Full pipeline: monitor → process → summarize |
-| `yt_digest.py` | Daily content digest generator |
+```bash
+git clone https://github.com/kamilskicki/scripts.git
+cd scripts
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r YouTube/requirements.txt
+pip install -e .[dev]
+```
 
-## 🔍 Search Keywords
+Run a smoke workflow:
 
-youtube, youtube-dl, youtube-transcript, youtube-api, cli-tool, automation, transcript, summarizer, python, rss-monitor, content-automation, digital-marketing, ai-tools, productivity, morning-briefing, news-digest
+```bash
+python YouTube/channel_monitor.py --hours 24
+python YouTube/yt_pipeline.py --hours 24 --output youtube-pipeline.md
+python YouTube/yt_digest.py --days 1 --quick
+```
 
-## 📋 Use Cases
+## Core commands
 
-- **Content Creation** — Monitor YouTube for research
-- **Learning** — Extract key moments from tutorials
-- **Automation** — Build automated content pipelines
-- **Daily Briefings** — Generate daily digests
+| Command | Purpose |
+|---|---|
+| `python YouTube/channel_monitor.py` | scan RSS feeds for new videos |
+| `python YouTube/youtube_processor.py <video-id-or-url>` | fetch full transcript |
+| `python YouTube/yt_summarizer.py <video-id-or-url>` | produce extractive summary |
+| `python YouTube/yt_key_moments.py <video-id-or-url>` | find timestamped highlights |
+| `python YouTube/yt_notify.py --channel ... --test` | send test notification |
+| `python YouTube/yt_pipeline.py` | monitor + transcript + summary |
+| `python YouTube/yt_digest.py` | generate markdown digest |
 
-## 🛠️ Tech Stack
+## Engineering standards
 
-- Python 3.9+
-- youtube-transcript-api
-- feedparser
+- Shared channel config is centralized in `YouTube/channels.py`.
+- Shared parsing/time helpers are centralized in `YouTube/common.py`.
+- UTC-aware timestamp filtering is used for feed recency checks.
+- CI validates lint + tests on Python 3.10/3.11/3.12.
 
-## 📄 License
+## Documentation
 
-MIT License - see LICENSE file
+- Full YouTube tooling guide: `YouTube/README.md`
+- Environment variable template: `YouTube/.env.example`
 
-## 👤 Author
+## Contributing
 
-[kamilskicki](https://github.com/kamilskicki)
+```bash
+ruff check YouTube
+pytest
+```
 
----
-*Part of the kamilskicki developer ecosystem*
+Use small, reviewable commits and include CLI output examples for behavior changes.
+
+## License
+
+MIT, see `LICENSE`.

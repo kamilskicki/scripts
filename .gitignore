@@ -21,10 +21,8 @@ build/
 Thumbs.db
 
 # Local notes (not for git)
-memory/
-*.md
-!README.md
-!YouTube/README.md
+memory/*
+!memory/.gitkeep
 
 # Database
 *.db

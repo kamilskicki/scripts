@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import argparse
+import re
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
@@ -117,13 +118,16 @@ class TelegramNotifier:
         """Send Telegram notification."""
         import urllib.request
         import urllib.error
-        
-        text = f"*{message.title}*\n\n{message.body}\n\n[Watch Video]({message.url})"
+
+        escaped_title = _escape_telegram_markdown(message.title)
+        escaped_body = _escape_telegram_markdown(message.body)
+        escaped_url = message.url.replace(")", "%29")
+        text = f"*{escaped_title}*\n\n{escaped_body}\n\n[Watch Video]({escaped_url})"
         
         payload = {
             "chat_id": self.chat_id,
             "text": text,
-            "parse_mode": "Markdown"
+            "parse_mode": "MarkdownV2"
         }
         
         try:
@@ -175,6 +179,11 @@ class NotifierFactory:
             return None
 
 
+def _escape_telegram_markdown(value: str) -> str:
+    """Escape Telegram MarkdownV2 special chars."""
+    return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", value or "")
+
+
 def notify_video(
     video: Dict,
     channels: List[str],
@@ -184,7 +193,7 @@ def notify_video(
     
     message = NotificationMessage(
         title=video.get("title", "New Video"),
-        body=video.get("channel", "YouTube"),
+        body=video.get("body", video.get("channel", "YouTube")),
         url=video.get("url", ""),
         channel=",".join(channels),
         thumbnail=video.get("thumbnail")
