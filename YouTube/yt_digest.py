@@ -4,16 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sqlite3
-import sys
 from datetime import timedelta
 from typing import Dict, List
 
-import feedparser
-
 from channels import DEFAULT_CHANNELS
-from common import ensure_directory, parse_published_datetime, utc_now
+from common import configure_logging, ensure_directory, fetch_feed, parse_published_datetime, utc_now
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(SCRIPT_DIR, "pipeline.db")
@@ -23,8 +21,9 @@ OUTPUT_DIR = os.path.join(SCRIPT_DIR, "..", "memory")
 class YouTubeDigest:
     """Generate daily digests from YouTube channels."""
 
-    def __init__(self, db_path: str = DB_PATH):
+    def __init__(self, db_path: str = DB_PATH, logger: logging.Logger | None = None):
         self.db_path = db_path
+        self.logger = logger or logging.getLogger("yt_digest")
 
     def get_recent_videos(self, days: int = 1) -> List[Dict]:
         """Get videos from last N days."""
@@ -35,7 +34,7 @@ class YouTubeDigest:
         for channel in DEFAULT_CHANNELS:
             try:
                 url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel['id']}"
-                feed = feedparser.parse(url)
+                feed = fetch_feed(url, logger=self.logger)
                 for entry in feed.entries[:10]:
                     video_id = getattr(entry, "yt_videoid", None)
                     if not video_id or video_id in seen:
@@ -55,7 +54,7 @@ class YouTubeDigest:
                         }
                     )
             except Exception as exc:
-                print(f"Error checking {channel['name']}: {exc}", file=sys.stderr)
+                self.logger.exception("Error checking %s: %s", channel["name"], exc)
 
         videos.sort(key=lambda video: video.get("published", ""), reverse=True)
         return videos
@@ -136,7 +135,7 @@ class YouTubeDigest:
             output_path = os.path.join(OUTPUT_DIR, output_file)
             with open(output_path, "w", encoding="utf-8") as handle:
                 handle.write(digest)
-            print(f"Digest saved to: {output_path}")
+            self.logger.info("Digest saved to %s", output_path)
         return digest
 
     def quick_summary(self, days: int = 1) -> str:
@@ -164,7 +163,14 @@ def main() -> None:
     parser.add_argument("--transcripts", "-t", action="store_true", help="Include transcript previews")
     parser.add_argument("--list-channels", "-l", action="store_true", help="List configured channels")
     parser.add_argument("--no-save", action="store_true", help="Don't save to file, just print")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument("--quiet", action="store_true", help="Only show errors")
     args = parser.parse_args()
+
+    try:
+        configure_logging(verbose=args.verbose, quiet=args.quiet)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if args.list_channels:
         print("Configured channels:")
@@ -172,7 +178,7 @@ def main() -> None:
             print(f"  - {channel['name']}: {channel['id']}")
         return
 
-    digest = YouTubeDigest()
+    digest = YouTubeDigest(logger=logging.getLogger("yt_digest"))
     if args.quick:
         print(digest.quick_summary(args.days))
         return

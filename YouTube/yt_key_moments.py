@@ -7,11 +7,12 @@ Extracts key moments with timestamps from YouTube video transcripts.
 import sys
 import json
 import argparse
+import logging
 import re
 from typing import List, Dict, Optional
 from youtube_transcript_api import YouTubeTranscriptApi
 
-from common import extract_video_id
+from common import configure_logging, extract_video_id, retry_call
 
 
 class KeyMomentsExtractor:
@@ -46,14 +47,19 @@ class KeyMomentsExtractor:
         r'\bhack\b',
     ]
     
-    def __init__(self):
+    def __init__(self, logger: logging.Logger | None = None):
         self.api = YouTubeTranscriptApi()
+        self.logger = logger or logging.getLogger("yt_key_moments")
         self.patterns = [re.compile(p, re.IGNORECASE) for p in self.IMPORTANT_PATTERNS]
     
     def get_transcript_with_timestamps(self, video_id: str) -> Optional[List[Dict]]:
         """Fetch transcript with timestamps."""
         try:
-            transcript = self.api.fetch(video_id)
+            transcript = retry_call(
+                lambda: self.api.fetch(video_id),
+                action_name=f"transcript fetch {video_id}",
+                logger=self.logger,
+            )
             return [
                 {
                     "start": snippet.start,
@@ -62,7 +68,7 @@ class KeyMomentsExtractor:
                 for snippet in transcript
             ]
         except Exception as exc:
-            print(f"Error fetching transcript: {exc}", file=sys.stderr)
+            self.logger.error("Error fetching transcript for %s: %s", video_id, exc)
             return None
     
     def find_key_moments(
@@ -171,8 +177,15 @@ def main():
         default="text",
         help="Output format"
     )
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument("--quiet", action="store_true", help="Only show errors")
     
     args = parser.parse_args()
+
+    try:
+        configure_logging(verbose=args.verbose, quiet=args.quiet)
+    except ValueError as exc:
+        parser.error(str(exc))
     
     try:
         video_id = extract_video_id(args.video_id)
@@ -180,7 +193,7 @@ def main():
         print(str(exc), file=sys.stderr)
         sys.exit(2)
     
-    extractor = KeyMomentsExtractor()
+    extractor = KeyMomentsExtractor(logger=logging.getLogger("yt_key_moments"))
     result = extractor.extract_moments(video_id, args.count)
     
     if "error" in result:

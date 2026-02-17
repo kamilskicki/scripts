@@ -5,16 +5,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sqlite3
 import sys
 from datetime import timedelta
 
-import feedparser
 from youtube_transcript_api import YouTubeTranscriptApi
 
 from channels import DEFAULT_CHANNELS
-from common import ensure_directory, parse_published_datetime, utc_now
+from common import (
+    configure_logging,
+    ensure_directory,
+    fetch_feed,
+    parse_published_datetime,
+    retry_call,
+    utc_now,
+)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(SCRIPT_DIR, "processed_videos.db")
@@ -41,10 +48,15 @@ def init_db() -> sqlite3.Connection:
     return conn
 
 
-def get_new_videos(conn: sqlite3.Connection, channel: dict, hours: int = 24) -> list[dict]:
+def get_new_videos(
+    conn: sqlite3.Connection,
+    channel: dict,
+    hours: int = 24,
+    logger: logging.Logger | None = None,
+) -> list[dict]:
     """Get unprocessed videos from the last N hours."""
     url = RSS_URL.format(channel["id"])
-    feed = feedparser.parse(url)
+    feed = fetch_feed(url, logger=logger)
     cutoff = utc_now() - timedelta(hours=hours)
     new_videos: list[dict] = []
 
@@ -75,28 +87,33 @@ def get_new_videos(conn: sqlite3.Connection, channel: dict, hours: int = 24) -> 
     return new_videos
 
 
-def fetch_transcript(video_id: str, api: YouTubeTranscriptApi) -> str | None:
+def fetch_transcript(video_id: str, api: YouTubeTranscriptApi, logger: logging.Logger) -> str | None:
     """Try to fetch transcript text for a video."""
     try:
-        transcript = api.fetch(video_id)
+        transcript = retry_call(
+            lambda: api.fetch(video_id),
+            action_name=f"transcript fetch {video_id}",
+            logger=logger,
+        )
         text = " ".join(snippet.text for snippet in transcript)
         return text[:8000]
     except Exception as exc:
-        print(f"Transcript unavailable for {video_id}: {exc}", file=sys.stderr)
+        logger.warning("Transcript unavailable for %s: %s", video_id, exc)
         return None
 
 
 def run(hours: int = 24, output_file: str | None = None) -> list[dict]:
     """Scan channels and print a JSON result set."""
+    logger = logging.getLogger("channel_monitor")
     conn = init_db()
     api = YouTubeTranscriptApi()
     results: list[dict] = []
 
     for channel in DEFAULT_CHANNELS:
         try:
-            new_videos = get_new_videos(conn, channel, hours)
+            new_videos = get_new_videos(conn, channel, hours, logger=logger)
             for video in new_videos:
-                transcript = fetch_transcript(video["id"], api)
+                transcript = fetch_transcript(video["id"], api, logger=logger)
                 video["transcript"] = transcript[:4000] if transcript else None
                 video["has_transcript"] = bool(transcript)
                 results.append(video)
@@ -119,9 +136,9 @@ def run(hours: int = 24, output_file: str | None = None) -> list[dict]:
                 conn.commit()
 
                 status = "OK" if transcript else "WARN(no transcript)"
-                print(f"{status} {video['channel']}: {video['title']}", file=sys.stderr)
+                logger.info("%s %s: %s", status, video["channel"], video["title"])
         except Exception as exc:
-            print(f"Error checking {channel['name']}: {exc}", file=sys.stderr)
+            logger.exception("Error checking %s: %s", channel["name"], exc)
 
     if output_file:
         ensure_directory(OUTPUT_DIR)
@@ -138,7 +155,7 @@ def run(hours: int = 24, output_file: str | None = None) -> list[dict]:
                     if video["transcript"]:
                         handle.write(f"- Transcript preview: {video['transcript'][:500]}...\n")
                     handle.write("\n")
-        print(f"Saved to {filepath}", file=sys.stderr)
+        logger.info("Saved markdown output to %s", filepath)
 
     print(json.dumps(results, indent=2, ensure_ascii=False))
     conn.close()
@@ -150,7 +167,14 @@ if __name__ == "__main__":
     parser.add_argument("--hours", "-H", type=int, default=24, help="Look back N hours")
     parser.add_argument("--output", "-o", default=None, help="Save markdown to memory/[filename]")
     parser.add_argument("--list", "-l", action="store_true", help="List configured channels")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument("--quiet", action="store_true", help="Only show errors")
     args = parser.parse_args()
+
+    try:
+        configure_logging(verbose=args.verbose, quiet=args.quiet)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if args.list:
         print("Configured channels:")

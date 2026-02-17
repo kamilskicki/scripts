@@ -54,6 +54,12 @@ pip install -e .[dev]
 - `channels.py`: single source of truth for monitored channels
 - `common.py`: UTC time helpers, published-date parsing, robust YouTube ID extraction
 
+## Reliability defaults
+
+- network timeout: `15s`
+- retry policy: `3 attempts` with exponential backoff
+- applies to RSS fetches, transcript fetches, and webhook deliveries
+
 ## Command reference
 
 ### 1) Channel monitor
@@ -66,6 +72,8 @@ Options:
 - `--hours/-H`: lookback window
 - `--output/-o`: markdown output file in `memory/`
 - `--list/-l`: print configured channels
+- `--verbose`: debug logging
+- `--quiet`: errors only
 
 Output:
 - JSON to stdout (automation friendly)
@@ -128,6 +136,8 @@ Options:
 - `--output/-o`: markdown output file
 - `--list-channels/-l`: print channel IDs
 - `--dry-run`: detect only, skip transcript/summary
+- `--verbose`: debug logging
+- `--quiet`: errors only
 
 ### 7) Digest
 
@@ -142,6 +152,8 @@ Options:
 - `--transcripts/-t`: include transcript previews
 - `--list-channels/-l`: print channel IDs
 - `--no-save`: stdout only
+- `--verbose`: debug logging
+- `--quiet`: errors only
 
 ## Data files
 

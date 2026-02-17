@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import sys
 from typing import Optional
 
 from youtube_transcript_api import YouTubeTranscriptApi
 
-from common import extract_video_id, utc_now
+from common import configure_logging, extract_video_id, retry_call, utc_now
 
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
@@ -19,16 +20,21 @@ SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 class VideoSummarizer:
     """Generate summaries from YouTube video transcripts."""
 
-    def __init__(self) -> None:
+    def __init__(self, logger: logging.Logger | None = None) -> None:
         self.api = YouTubeTranscriptApi()
+        self.logger = logger or logging.getLogger("yt_summarizer")
 
     def get_transcript(self, video_id: str) -> Optional[str]:
         """Fetch clean transcript text from video."""
         try:
-            transcript = self.api.fetch(video_id)
+            transcript = retry_call(
+                lambda: self.api.fetch(video_id),
+                action_name=f"transcript fetch {video_id}",
+                logger=self.logger,
+            )
             return " ".join(snippet.text for snippet in transcript)
         except Exception as exc:
-            print(f"Error fetching transcript: {exc}", file=sys.stderr)
+            self.logger.error("Error fetching transcript for %s: %s", video_id, exc)
             return None
 
     def generate_summary(self, transcript: str, max_length: int = 500) -> str:
@@ -81,7 +87,14 @@ def main() -> None:
     parser.add_argument("video_id", help="YouTube video ID or URL")
     parser.add_argument("--format", "-f", choices=["text", "json", "markdown"], default="text", help="Output format")
     parser.add_argument("--length", "-l", type=int, default=500, help="Maximum summary length")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument("--quiet", action="store_true", help="Only show errors")
     args = parser.parse_args()
+
+    try:
+        configure_logging(verbose=args.verbose, quiet=args.quiet)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     try:
         video_id = extract_video_id(args.video_id)
@@ -89,7 +102,7 @@ def main() -> None:
         print(str(exc), file=sys.stderr)
         sys.exit(2)
 
-    summarizer = VideoSummarizer()
+    summarizer = VideoSummarizer(logger=logging.getLogger("yt_summarizer"))
     result = summarizer.summarize_video(video_id, max_length=args.length)
     if "error" in result:
         print(f"Error: {result['error']}", file=sys.stderr)

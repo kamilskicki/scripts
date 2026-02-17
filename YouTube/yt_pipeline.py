@@ -4,17 +4,23 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sqlite3
-import sys
 from datetime import timedelta
 from typing import Dict, List, Optional
 
-import feedparser
 from youtube_transcript_api import YouTubeTranscriptApi
 
 from channels import DEFAULT_CHANNELS
-from common import ensure_directory, parse_published_datetime, utc_now
+from common import (
+    configure_logging,
+    ensure_directory,
+    fetch_feed,
+    parse_published_datetime,
+    retry_call,
+    utc_now,
+)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(SCRIPT_DIR, "pipeline.db")
@@ -24,8 +30,9 @@ OUTPUT_DIR = os.path.join(SCRIPT_DIR, "..", "memory")
 class YouTubePipeline:
     """Full YouTube monitoring and processing pipeline."""
 
-    def __init__(self, db_path: str = DB_PATH):
+    def __init__(self, db_path: str = DB_PATH, logger: logging.Logger | None = None):
         self.db_path = db_path
+        self.logger = logger or logging.getLogger("yt_pipeline")
         self.api = YouTubeTranscriptApi()
         self._init_db()
 
@@ -62,7 +69,7 @@ class YouTubePipeline:
             for channel in channels:
                 try:
                     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel['id']}"
-                    feed = feedparser.parse(url)
+                    feed = fetch_feed(url, logger=self.logger)
                     for entry in feed.entries[:5]:
                         video_id = getattr(entry, "yt_videoid", None)
                         if not video_id or video_id in seen:
@@ -88,7 +95,7 @@ class YouTubePipeline:
                             }
                         )
                 except Exception as exc:
-                    print(f"Error checking {channel['name']}: {exc}", file=sys.stderr)
+                    self.logger.exception("Error checking %s: %s", channel["name"], exc)
         finally:
             conn.close()
         return new_videos
@@ -96,10 +103,14 @@ class YouTubePipeline:
     def fetch_transcript(self, video_id: str) -> Optional[str]:
         """Fetch video transcript."""
         try:
-            transcript = self.api.fetch(video_id)
+            transcript = retry_call(
+                lambda: self.api.fetch(video_id),
+                action_name=f"transcript fetch {video_id}",
+                logger=self.logger,
+            )
             return " ".join(snippet.text for snippet in transcript)
         except Exception as exc:
-            print(f"Transcript error for {video_id}: {exc}", file=sys.stderr)
+            self.logger.warning("Transcript error for %s: %s", video_id, exc)
             return None
 
     def generate_summary(self, transcript: str, max_length: int = 500) -> str:
@@ -174,9 +185,9 @@ class YouTubePipeline:
     def run(self, channels: List[Dict] | None = None, hours: int = 24, output_file: str | None = None) -> Dict:
         """Run full pipeline."""
         channels = channels or DEFAULT_CHANNELS
-        print(f"Checking {len(channels)} channels...")
+        self.logger.info("Checking %s channels...", len(channels))
         new_videos = self.check_channels(channels, hours)
-        print(f"Found {len(new_videos)} new videos")
+        self.logger.info("Found %s new videos", len(new_videos))
         if not new_videos:
             return {"new_videos": 0, "processed": 0, "failed": 0, "videos": []}
 
@@ -201,7 +212,7 @@ class YouTubePipeline:
                     handle.write(f"## {result['channel']}: {result['title']}\n")
                     handle.write(f"- URL: https://youtube.com/watch?v={result['video_id']}\n")
                     handle.write(f"- Summary: {result['summary']}\n\n")
-            print(f"Results saved to {output_path}")
+            self.logger.info("Results saved to %s", output_path)
 
         return {"new_videos": len(new_videos), "processed": processed, "failed": failed, "videos": results}
 
@@ -212,7 +223,14 @@ def main() -> None:
     parser.add_argument("--output", "-o", default="youtube-pipeline.md", help="Output file name")
     parser.add_argument("--list-channels", "-l", action="store_true", help="List configured channels")
     parser.add_argument("--dry-run", action="store_true", help="Check for new videos without processing")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument("--quiet", action="store_true", help="Only show errors")
     args = parser.parse_args()
+
+    try:
+        configure_logging(verbose=args.verbose, quiet=args.quiet)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if args.list_channels:
         print("Configured channels:")
@@ -220,7 +238,7 @@ def main() -> None:
             print(f"  - {channel['name']}: {channel['id']}")
         return
 
-    pipeline = YouTubePipeline()
+    pipeline = YouTubePipeline(logger=logging.getLogger("yt_pipeline"))
     if args.dry_run:
         new_videos = pipeline.check_channels(DEFAULT_CHANNELS, args.hours)
         print(f"Found {len(new_videos)} new videos:")
