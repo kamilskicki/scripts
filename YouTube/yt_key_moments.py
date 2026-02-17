@@ -4,12 +4,12 @@ YouTube Key Moments Extractor — v1.0
 Extracts key moments with timestamps from YouTube video transcripts.
 """
 
-import sys
-import json
 import argparse
+import json
 import logging
 import re
-from typing import List, Dict, Optional
+import sys
+
 from youtube_transcript_api import YouTubeTranscriptApi
 
 from common import configure_logging, extract_video_id, retry_call
@@ -52,7 +52,7 @@ class KeyMomentsExtractor:
         self.logger = logger or logging.getLogger("yt_key_moments")
         self.patterns = [re.compile(p, re.IGNORECASE) for p in self.IMPORTANT_PATTERNS]
     
-    def get_transcript_with_timestamps(self, video_id: str) -> Optional[List[Dict]]:
+    def get_transcript_with_timestamps(self, video_id: str) -> list[dict] | None:
         """Fetch transcript with timestamps."""
         try:
             transcript = retry_call(
@@ -73,10 +73,10 @@ class KeyMomentsExtractor:
     
     def find_key_moments(
         self, 
-        transcript: List[Dict], 
+        transcript: list[dict], 
         num_moments: int = 10,
         min_duration: int = 30
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Find key moments in the transcript."""
         moments = []
         

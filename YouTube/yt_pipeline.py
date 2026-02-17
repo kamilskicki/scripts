@@ -8,7 +8,6 @@ import logging
 import os
 import sqlite3
 from datetime import timedelta
-from typing import Dict, List, Optional
 
 from youtube_transcript_api import YouTubeTranscriptApi
 
@@ -58,7 +57,7 @@ class YouTubePipeline:
     def get_db_connection(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path)
 
-    def check_channels(self, channels: List[Dict], hours: int = 24) -> List[Dict]:
+    def check_channels(self, channels: list[dict], hours: int = 24) -> list[dict]:
         """Check channels for new, not-yet-completed videos."""
         cutoff = utc_now() - timedelta(hours=hours)
         new_videos: list[dict] = []
@@ -100,7 +99,7 @@ class YouTubePipeline:
             conn.close()
         return new_videos
 
-    def fetch_transcript(self, video_id: str) -> Optional[str]:
+    def fetch_transcript(self, video_id: str) -> str | None:
         """Fetch video transcript."""
         try:
             transcript = retry_call(
@@ -128,7 +127,7 @@ class YouTubePipeline:
             summary = summary[:max_length].rsplit(" ", 1)[0] + "..."
         return summary
 
-    def process_video(self, video: Dict) -> Dict:
+    def process_video(self, video: dict) -> dict:
         """Process a single video: transcript + summary."""
         video_id = video["id"]
         conn = self.get_db_connection()
@@ -182,7 +181,7 @@ class YouTubePipeline:
             "transcript_length": len(transcript),
         }
 
-    def run(self, channels: List[Dict] | None = None, hours: int = 24, output_file: str | None = None) -> Dict:
+    def run(self, channels: list[dict] | None = None, hours: int = 24, output_file: str | None = None) -> dict:
         """Run full pipeline."""
         channels = channels or DEFAULT_CHANNELS
         self.logger.info("Checking %s channels...", len(channels))

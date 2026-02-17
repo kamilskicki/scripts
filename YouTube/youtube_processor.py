@@ -7,7 +7,6 @@ import argparse
 import json
 import logging
 import sys
-from typing import Optional
 
 from youtube_transcript_api import YouTubeTranscriptApi
 
@@ -47,7 +46,7 @@ class VideoProcessor:
             )
             return " ".join(snippet.text for snippet in transcript)
 
-    def extract_text(self, video_id: str) -> Optional[str]:
+    def extract_text(self, video_id: str) -> str | None:
         """Fetch clean transcript text from video."""
         attempts = [None, ["en"], ["en-US", "en"], ["en-GB", "en"]]
         for languages in attempts:

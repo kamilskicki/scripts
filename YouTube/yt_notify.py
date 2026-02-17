@@ -4,13 +4,12 @@ YouTube Notify — v1.0
 Sends notifications to Discord/Slack/Telegram when new videos are found.
 """
 
-import os
-import sys
-import json
 import argparse
+import json
 import logging
+import os
 import re
-from typing import List, Dict, Optional
+import sys
 from dataclasses import dataclass
 
 from common import configure_logging, post_json
@@ -23,7 +22,7 @@ class NotificationMessage:
     body: str
     url: str
     channel: str
-    thumbnail: Optional[str] = None
+    thumbnail: str | None = None
 
 
 class DiscordNotifier:
@@ -106,8 +105,6 @@ class TelegramNotifier:
     
     def send(self, message: NotificationMessage) -> bool:
         """Send Telegram notification."""
-        import urllib.request
-        import urllib.error
 
         escaped_title = _escape_telegram_markdown(message.title)
         escaped_body = _escape_telegram_markdown(message.body)
@@ -133,7 +130,7 @@ class NotifierFactory:
     """Factory to create notifiers based on channel."""
     
     @staticmethod
-    def create(channel: str, config: Dict, logger: logging.Logger | None = None) -> Optional[object]:
+    def create(channel: str, config: dict, logger: logging.Logger | None = None) -> object | None:
         """Create notifier for given channel."""
         channel = channel.lower()
         logger = logger or logging.getLogger("yt_notify.factory")
@@ -171,11 +168,11 @@ def _escape_telegram_markdown(value: str) -> str:
 
 
 def notify_video(
-    video: Dict,
-    channels: List[str],
-    config: Dict,
+    video: dict,
+    channels: list[str],
+    config: dict,
     logger: logging.Logger | None = None,
-) -> Dict:
+) -> dict:
     """Send notification for a video to specified channels."""
     logger = logger or logging.getLogger("yt_notify")
     

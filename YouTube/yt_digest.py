@@ -8,10 +8,15 @@ import logging
 import os
 import sqlite3
 from datetime import timedelta
-from typing import Dict, List
 
 from channels import DEFAULT_CHANNELS
-from common import configure_logging, ensure_directory, fetch_feed, parse_published_datetime, utc_now
+from common import (
+    configure_logging,
+    ensure_directory,
+    fetch_feed,
+    parse_published_datetime,
+    utc_now,
+)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(SCRIPT_DIR, "pipeline.db")
@@ -25,7 +30,7 @@ class YouTubeDigest:
         self.db_path = db_path
         self.logger = logger or logging.getLogger("yt_digest")
 
-    def get_recent_videos(self, days: int = 1) -> List[Dict]:
+    def get_recent_videos(self, days: int = 1) -> list[dict]:
         """Get videos from last N days."""
         videos: list[dict] = []
         cutoff = utc_now() - timedelta(days=days)
@@ -59,7 +64,7 @@ class YouTubeDigest:
         videos.sort(key=lambda video: video.get("published", ""), reverse=True)
         return videos
 
-    def get_video_metadata_map(self, video_ids: List[str]) -> Dict[str, Dict]:
+    def get_video_metadata_map(self, video_ids: list[str]) -> dict[str, dict]:
         """Get metadata for a batch of videos from pipeline DB."""
         if not video_ids:
             return {}

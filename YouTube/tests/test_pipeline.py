@@ -3,9 +3,9 @@ from __future__ import annotations
 import sqlite3
 from types import SimpleNamespace
 
+import yt_pipeline as yt_pipeline_module
 from common import utc_now
 from yt_pipeline import YouTubePipeline
-import yt_pipeline as yt_pipeline_module
 
 
 def test_check_channels_filters_done_and_deduplicates(monkeypatch, tmp_path) -> None:

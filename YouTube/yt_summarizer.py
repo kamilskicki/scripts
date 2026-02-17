@@ -8,7 +8,6 @@ import json
 import logging
 import re
 import sys
-from typing import Optional
 
 from youtube_transcript_api import YouTubeTranscriptApi
 
@@ -24,7 +23,7 @@ class VideoSummarizer:
         self.api = YouTubeTranscriptApi()
         self.logger = logger or logging.getLogger("yt_summarizer")
 
-    def get_transcript(self, video_id: str) -> Optional[str]:
+    def get_transcript(self, video_id: str) -> str | None:
         """Fetch clean transcript text from video."""
         try:
             transcript = retry_call(
