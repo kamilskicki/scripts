@@ -46,7 +46,7 @@ pip install -r YouTube/requirements.txt
 Dev setup (tests/lint):
 
 ```bash
-pip install -e .[dev]
+pip install -r requirements-dev.txt
 ```
 
 ## Shared modules

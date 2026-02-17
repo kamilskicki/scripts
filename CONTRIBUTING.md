@@ -11,7 +11,7 @@
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r YouTube/requirements.txt
-pip install -e .[dev]
+pip install -r requirements-dev.txt
 ```
 
 ## Quality checks
